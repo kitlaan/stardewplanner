@@ -577,7 +577,7 @@ Board.prototype.drawTile = function drawTile(location, tile, force = false) {
     console.log('drawing ' + hardX + ',' + hardY + ': ' + specialtile);
     if (this.tiles[hardY][hardX]) {
         console.log('exist ' + hardX + ',' + hardY + ': ' + this.tiles[hardY][hardX].attr('tileCustom'));
-        if (this.tiles[hardY][hardX].attr('tileCustom') === specialtile) {
+        if (!this.brush.erase && this.tiles[hardY][hardX].attr('tileCustom') === specialtile) {
             // same tile? don't bother
             return;
         }
@@ -595,7 +595,9 @@ Board.prototype.drawTile = function drawTile(location, tile, force = false) {
                 this.redrawSurroundingTiles(location, tile);
             }
 
-            if (this.brush.erase) {
+            // TODO: this is soooo wrong: overloading force and erase
+            // I think we need to separate out the logic...
+            if (this.brush.erase && !force) {
                 return;
             }
         }
@@ -613,7 +615,10 @@ Board.prototype.drawTile = function drawTile(location, tile, force = false) {
 
         this.tiles[hardY][hardX] = newTile;
 
-        this.redrawSurroundingTiles(location, tile);
+        // make sure to only recurse once!
+        if (!force) {
+            this.redrawSurroundingTiles(location, tile);
+        }
 
         return newTile;
     }
@@ -626,8 +631,8 @@ Board.prototype.drawTile = function drawTile(location, tile, force = false) {
  * @return {*}
  */
 Board.prototype.redrawSurroundingTiles = function redrawSurroundingTiles(location, tile) {
-    // the only tiles that need checking are fences
-    if (!tile || !tile.endsWith('fence')) {
+    // the only tiles that need checking are fences (or eraser)
+    if (tile && !tile.endsWith('fence')) {
         return;
     }
 
@@ -644,11 +649,12 @@ Board.prototype.redrawSurroundingTiles = function redrawSurroundingTiles(locatio
                 var hardYY = hardY + offY;
 
                 if (board.tiles[hardYY] && board.tiles[hardYY][hardXX]) {
-                    if (board.tiles[hardYY][hardXX].attr('tileType') === tile) {
+                    var tiletype = board.tiles[hardYY][hardXX].attr('tileType');
+                    if (!tile && tiletype.endsWith('fence') || tiletype === tile) {
                         board.drawTile({
                             x: hardXX * board.tileSize,
                             y: hardYY * board.tileSize
-                        }, tile, true);
+                        }, tiletype, true);
                     }
                 }
             }
