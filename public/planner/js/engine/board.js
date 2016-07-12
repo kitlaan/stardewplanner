@@ -518,9 +518,10 @@ Board.prototype.drawTiles = function drawTiles(area, tile) {
  * Draws tile to given location, also does all the checking work
  * @param location
  * @param tile
+ * @param force
  * @return {*}
  */
-Board.prototype.drawTile = function drawTile(location, tile) {
+Board.prototype.drawTile = function drawTile(location, tile, force = false) {
     var hardX = location.x / this.tileSize;
     var hardY = location.y / this.tileSize;
 
@@ -532,14 +533,67 @@ Board.prototype.drawTile = function drawTile(location, tile) {
         return;
     }
 
+    var specialtile = tile;
+    if (tile && tile.endsWith('fence')) {
+        var hasAbove = this.tiles[hardY-1] && this.tiles[hardY-1][hardX] &&
+                       this.tiles[hardY-1][hardX].attr('tileType') === tile;
+        var hasBelow = this.tiles[hardY+1] && this.tiles[hardY+1][hardX] &&
+                       this.tiles[hardY+1][hardX].attr('tileType') === tile;
+        var hasLeft  = this.tiles[hardY] && this.tiles[hardY][hardX-1] &&
+                       this.tiles[hardY][hardX-1].attr('tileType') === tile;
+        var hasRight = this.tiles[hardY] && this.tiles[hardY][hardX+1] &&
+                       this.tiles[hardY][hardX+1].attr('tileType') === tile;
+
+        // TODO: this can probably be better done as a 2d array?
+        if (hasLeft && hasRight) {
+            if (hasAbove && hasBelow) {
+                specialtile = tile + '--p';
+            } else if (hasAbove) {
+                specialtile = tile + '--tu';
+            } else if (hasBelow) {
+                specialtile = tile + '--td';
+            }
+        } else if (hasAbove && hasBelow) {
+            if (hasLeft) {
+                specialtile = tile + '--tl';
+            } else if (hasRight) {
+                specialtile = tile + '--tr';
+            } else {
+                specialtile = tile + '--v';
+            }
+        } else if (hasAbove && hasRight) {
+            specialtile = tile + '--ur';
+        } else if (hasAbove && hasLeft) {
+            specialtile = tile + '--ul';
+        } else if (hasBelow && hasRight) {
+            specialtile = tile + '--dr';
+        } else if (hasBelow && hasLeft) {
+            specialtile = tile + '--dl';
+        } else if (hasAbove || hasBelow) {
+            specialtile = tile + '--v';
+        }
+    }
+
+    console.log('drawing ' + hardX + ',' + hardY + ': ' + specialtile);
     if (this.tiles[hardY][hardX]) {
+        console.log('exist ' + hardX + ',' + hardY + ': ' + this.tiles[hardY][hardX].attr('tileCustom'));
+        if (this.tiles[hardY][hardX].attr('tileCustom') === specialtile) {
+            // same tile? don't bother
+            return;
+        }
+
         // there seems to be a tile in place here already, remove it
 
-        if (!this.brush.overwriting && !this.brush.erase) {
+        if (!this.brush.overwriting && !this.brush.erase && !force) {
             return;
         } else {
             this.tiles[hardY][hardX].remove();
             this.tiles[hardY][hardX] = null;
+
+            // make sure to only recurse once!
+            if (!force) {
+                this.redrawSurroundingTiles(location, tile);
+            }
 
             if (this.brush.erase) {
                 return;
@@ -547,20 +601,61 @@ Board.prototype.drawTile = function drawTile(location, tile) {
         }
     }
 
-    if (tile) {
-        var newTile = this.R.use(tile);
+    if (specialtile) {
+        var newTile = this.R.use(specialtile);
         newTile.attr({
             x: location.x,
             y: location.y,
             tileType: tile,
+            tileCustom: specialtile,
             pointerEvents: 'none'
         });
 
         this.tiles[hardY][hardX] = newTile;
 
+        this.redrawSurroundingTiles(location, tile);
+
         return newTile;
     }
 };
+
+/**
+ * Redraws tiles around a given location
+ * @param location
+ * @param tile
+ * @return {*}
+ */
+Board.prototype.redrawSurroundingTiles = function redrawSurroundingTiles(location, tile) {
+    // the only tiles that need checking are fences
+    if (!tile || !tile.endsWith('fence')) {
+        return;
+    }
+
+    var hardX = location.x / this.tileSize;
+    var hardY = location.y / this.tileSize;
+
+    var board = this;
+
+    [-1, 0, +1].forEach(function (offY) {
+        [-1, 0, +1].forEach(function (offX) {
+            // only check adjacent tiles (not diagonal)
+            if ((offX == 0) != (offY == 0)) {
+                var hardXX = hardX + offX;
+                var hardYY = hardY + offY;
+
+                if (board.tiles[hardYY] && board.tiles[hardYY][hardXX]) {
+                    if (board.tiles[hardYY][hardXX].attr('tileType') === tile) {
+                        board.drawTile({
+                            x: hardXX * board.tileSize,
+                            y: hardYY * board.tileSize
+                        }, tile, true);
+                    }
+                }
+            }
+        });
+    });
+};
+
 
 /**
  * Draws grid. This is just to visually ease planning
